@@ -37,7 +37,7 @@ pub fn main() !void {
         if (top.kind == .file) {
             std.debug.print("Found file: {s} {d}\n", .{ top.path, top.size_b });
         } else {
-            std.debug.print("Found non-file: {s}\n", .{top.path});
+            std.debug.print("Found non-file: {s} {d}\n", .{ top.path, top.size_b });
         }
         try stack.appendSlice(allocator, top.children.items);
     }

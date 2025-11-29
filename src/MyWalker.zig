@@ -95,8 +95,24 @@ pub fn copywalk(directory: Dir, allocator: Allocator) !*Node {
             item.iter.dir.close();
         }
     }
-    // TODO: Calculate Size by iterating on all node that are files
+    // Calculate Size by iterating on all node that are files
     //   and then using the parent link to bubble up the size until
     //   you reach root.
+    _ = calculate_tree_size(root_node);
     return root_node;
+}
+
+fn calculate_tree_size(node: *Node) u64 {
+    if (node.kind == .file) {
+        return node.size_b;
+    } else if (node.kind == .directory) {
+        var total_size: u64 = 0;
+        for (node.children.items) |childnode| {
+            total_size += calculate_tree_size(childnode);
+        }
+        node.size_b = total_size;
+        return total_size;
+    } else {
+        return 0;
+    }
 }
