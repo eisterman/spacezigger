@@ -2,7 +2,6 @@ const std = @import("std");
 const fstree = @import("fstree.zig");
 const rl = @import("raylib");
 const rg = @import("raygui");
-const mycamera = @import("camera.zig");
 
 pub fn main() !void {
     const allocator = std.heap.page_allocator;
