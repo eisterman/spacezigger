@@ -10,6 +10,7 @@ pub fn main() !void {
     // Create the filesystem tree
     const targetdir = try std.fs.openDirAbsolute("/home/fpasqua/zig/spacezigger", .{ .iterate = true });
     const rootnode = try fstree.copywalk(targetdir, allocator);
+    _ = fstree.calculate_tree_size(rootnode);
     var stack: std.ArrayList(*fstree.Node) = .empty;
     try stack.append(allocator, rootnode);
     while (stack.items.len != 0) {
