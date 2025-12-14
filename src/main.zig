@@ -1,9 +1,12 @@
 const std = @import("std");
 const fstree = @import("fstree.zig");
+const layout_mod = @import("layout.zig");
 const rl = @import("raylib");
 const rg = @import("raygui");
 
 pub fn main() !void {
+    // const screenWidth = 600;
+    // const screenHeight = 400;
     const screenWidth = 1280;
     const screenHeight = 720;
     const gpa = std.heap.page_allocator;
@@ -13,7 +16,7 @@ pub fn main() !void {
     const targetdir = try std.fs.openDirAbsolute("/home/fpasqua/Downloads", .{ .iterate = true });
     var rootnode = try fstree.copywalk(targetdir, gpa);
     gpa.free(rootnode.basename);
-    rootnode.basename = try gpa.dupeZ(u8, "Downloads");
+    rootnode.basename = try gpa.dupeZ(u8, "Target Directory");
     _ = fstree.calculate_tree_size(rootnode);
     std.debug.print("Size Root: {}\n", .{rootnode.size_b});
     rootnode.layout = .{
@@ -22,19 +25,7 @@ pub fn main() !void {
             .y = screenHeight,
         },
     };
-    try fstree.calculate_layout(gpa, rootnode);
-    // var stack: std.ArrayList(*fstree.Node) = .empty;
-    // try stack.append(allocator, rootnode);
-    // while (stack.items.len != 0) {
-    //     const top = stack.pop().?;
-    //     if (top.kind == .file) {
-    //         std.debug.print("Found file: {s} {d}\n", .{ top.path, top.size_b });
-    //     } else {
-    //         std.debug.print("Found non-file: {s} {d}\n", .{ top.path, top.size_b });
-    //     }
-    //     try stack.appendSlice(allocator, top.children.items);
-    // }
-    // Initialize graphics
+    try layout_mod.calculate_layout(gpa, rootnode);
 
     rl.initWindow(screenWidth, screenHeight, "SpaceZigger");
     defer rl.closeWindow();
@@ -79,10 +70,11 @@ pub fn main() !void {
                     // Questi orpelli RICHIEDONO che l'assegnazione del layout e la graficazione
                     // avvengano praticamente insieme.
                     // Aiuto.
-                    const width = rl.measureText(top.basename, 8);
+                    const fontSize = 8;
+                    const width = rl.measureText(top.basename, fontSize);
                     const center = dl.center();
-                    if (dl.width() > width + 2 and center.y >= 8) {
-                        rl.drawText(top.basename, center.x - @divTrunc(width, 2), center.y - 4, 8, .black);
+                    if (dl.width() > width + 2 and dl.height() >= fontSize + 2) {
+                        rl.drawText(top.basename, center.x - @divTrunc(width, 2), center.y - 4, fontSize, .black);
                     }
                     rl.drawRectangleLines(dl.upper_left.x, dl.upper_left.y, dl.width(), dl.height(), .black);
                 } else {
