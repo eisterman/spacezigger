@@ -78,7 +78,6 @@ const RowState = struct {
             .size_b = self.size_b + node.size_b,
         };
         const new_war = self.worst_aspect_ratio(self.nodes.items, new_row);
-        std.debug.print("Node {s} WAR: old {} new {}\n", .{ node.path, old_war, new_war });
         if (self.nodes.items.len == 0 or new_war <= old_war) {
             // Apply change to self
             self.layout = new_row_layout;
@@ -133,9 +132,7 @@ const RowState = struct {
             .layout = self.layout,
             .size_b = self.size_b,
         };
-        std.debug.print("ROW {}\n", .{self.size_b});
         for (self.nodes.items) |node| {
-            std.debug.print("\t{s} {}\n", .{ node.path, node.size_b });
             const free_size_b: f32 = @floatFromInt(free.size_b);
             const node_size_b: f32 = @floatFromInt(node.size_b);
             const ratio: f32 = node_size_b / free_size_b;
