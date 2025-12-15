@@ -10,11 +10,13 @@ pub fn main() !void {
     const screenWidth = 1280;
     const screenHeight = 720;
     const gpa = std.heap.page_allocator;
-    // var gpa = std.heap.DebugAllocator(.{}).init;
-    // const allocator = gpa.allocator();
+    // var gpa_allocator = std.heap.DebugAllocator(.{}).init;
+    // const gpa = gpa_allocator.allocator();
+    // defer _ = gpa_allocator.detectLeaks();
     // Create the filesystem tree
-    const targetdir = try std.fs.openDirAbsolute("/home/fpasqua/Downloads", .{ .iterate = true });
+    const targetdir = try std.fs.openDirAbsolute("/home/fpasqua/zig/spacezigger/testdir", .{ .iterate = true });
     var rootnode = try fstree.copywalk(targetdir, gpa);
+    defer rootnode.deinit(gpa);
     gpa.free(rootnode.basename);
     rootnode.basename = try gpa.dupeZ(u8, "Target Directory");
     _ = fstree.calculate_tree_size(rootnode);
@@ -32,7 +34,9 @@ pub fn main() !void {
     rl.setTargetFPS(60);
     // Main Game Loop
     var cur_layer_stack: std.ArrayList(*fstree.Node) = .empty;
+    defer cur_layer_stack.deinit(gpa);
     var next_layer_stack: std.ArrayList(*fstree.Node) = .empty;
+    defer next_layer_stack.deinit(gpa);
     var max_depth: i32 = 0;
     while (!rl.windowShouldClose()) {
         // Logic

@@ -71,8 +71,20 @@ pub const Node = struct {
 
     children: std.ArrayList(*Node),
     parent: ?*Node,
+
+    const Self = @This();
+    pub fn deinit(self: *Self, gpa: Allocator) void {
+        gpa.free(self.basename);
+        gpa.free(self.path);
+        for (self.children.items) |c| {
+            c.deinit(gpa);
+        }
+        self.children.deinit(gpa);
+        gpa.destroy(self);
+    }
 };
 
+// TODO: right no errdefer for the tree content
 pub fn copywalk(directory: Dir, allocator: Allocator) !*Node {
     const StackItem = struct {
         // Original (from FS)
@@ -83,6 +95,7 @@ pub fn copywalk(directory: Dir, allocator: Allocator) !*Node {
     };
     var gpa = allocator;
     var stack: std.ArrayList(StackItem) = .empty;
+    defer stack.deinit(gpa);
     const root_node = try gpa.create(Node);
     root_node.* = .{
         .basename = try gpa.dupeZ(u8, "."),
@@ -92,12 +105,12 @@ pub fn copywalk(directory: Dir, allocator: Allocator) !*Node {
         .children = .empty,
         .parent = null,
     };
+    errdefer root_node.deinit(gpa);
     try stack.append(allocator, .{
         .iter = directory.iterate(),
         .dirname_len = 0,
         .node = root_node,
     });
-    defer stack.deinit(gpa);
     var name_buffer: std.ArrayList(u8) = .empty;
     defer name_buffer.deinit(gpa);
     while (stack.items.len != 0) {
