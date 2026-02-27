@@ -175,7 +175,7 @@ pub const LayoutNode = struct {
 
     pub fn namebox_layout(self: Self) ?LayoutRect {
         // If return null, doesn't draw it.
-        if (self.box_layout.height() < 32) {
+        if (self.box_layout.height() < 32 or self.box_layout.width() < 4) {
             return null;
         } else {
             return .{
