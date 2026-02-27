@@ -14,7 +14,8 @@ pub fn main() !void {
     // const gpa = gpa_allocator.allocator();
     // defer _ = gpa_allocator.detectLeaks();
     // Create the filesystem tree
-    const targetdir = try std.fs.openDirAbsolute("/home/fpasqua/zig/spacezigger/testdir", .{ .iterate = true });
+    const targetdir = try std.fs.openDirAbsolute("/home/fpasqua/Downloads", .{ .iterate = true });
+    // const targetdir = try std.fs.openDirAbsolute("/home/fpasqua/zig/spacezigger/testdir", .{ .iterate = true });
     var root_fsnode = try fstree.create_fstree(targetdir, gpa);
     // var rootnode = try old_fstree.copywalk(targetdir, gpa);
     defer root_fsnode.deinit(gpa);

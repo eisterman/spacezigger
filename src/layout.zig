@@ -123,8 +123,8 @@ fn computeWorstAspectRatio(
     var worst: f32 = 0.0;
     for (sizes) |size| {
         const ratio = @as(f32, @floatFromInt(size)) / total;
-        const item_moving = ratio * moving;
-        const ar = if (fixed > item_moving) fixed / item_moving else item_moving / fixed;
+        const item_fixed_part = ratio * fixed;
+        const ar = if (moving > item_fixed_part) moving / item_fixed_part else item_fixed_part / moving;
         worst = @max(worst, ar);
     }
     return worst;
