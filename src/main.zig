@@ -15,27 +15,29 @@ pub fn main() !void {
     // defer _ = gpa_allocator.detectLeaks();
     // Create the filesystem tree
     const targetdir = try std.fs.openDirAbsolute("/home/fpasqua/zig/spacezigger/testdir", .{ .iterate = true });
-    var rootnode = try fstree.copywalk(targetdir, gpa);
-    defer rootnode.deinit(gpa);
-    gpa.free(rootnode.basename);
-    rootnode.basename = try gpa.dupeZ(u8, "Target Directory");
-    _ = fstree.calculate_tree_size(rootnode);
-    std.debug.print("Size Root: {}\n", .{rootnode.size_b});
-    rootnode.layout = .{
+    var root_fsnode = try fstree.create_fstree(targetdir, gpa);
+    // var rootnode = try old_fstree.copywalk(targetdir, gpa);
+    defer root_fsnode.deinit(gpa);
+    gpa.free(root_fsnode.basename);
+    root_fsnode.basename = try gpa.dupeZ(u8, "Target Directory");
+    // _ = old_fstree.calculate_tree_size(rootnode);
+    std.debug.print("Size Root: {}\n", .{root_fsnode.size_b});
+    const base_layout: layout_mod.LayoutRect = .{
         .lower_right = .{
             .x = screenWidth,
             .y = screenHeight,
         },
     };
-    try layout_mod.calculate_layout(gpa, rootnode);
+    const rootnode = try layout_mod.build_layout(gpa, root_fsnode, base_layout);
+    // try old_layout_mod.calculate_layout(gpa, rootnode);
 
     rl.initWindow(screenWidth, screenHeight, "SpaceZigger");
     defer rl.closeWindow();
     rl.setTargetFPS(60);
     // Main Game Loop
-    var cur_layer_stack: std.ArrayList(*fstree.Node) = .empty;
+    var cur_layer_stack: std.ArrayList(*layout_mod.LayoutNode) = .empty;
     defer cur_layer_stack.deinit(gpa);
-    var next_layer_stack: std.ArrayList(*fstree.Node) = .empty;
+    var next_layer_stack: std.ArrayList(*layout_mod.LayoutNode) = .empty;
     defer next_layer_stack.deinit(gpa);
     var max_depth: i32 = 0;
     while (!rl.windowShouldClose()) {
@@ -61,29 +63,23 @@ pub fn main() !void {
             const dir_color = rl.Color.orange.brightness(-0.1 * draw_depth);
             while (cur_layer_stack.pop()) |top| {
                 // Act on childrens
-                if (top.layout) |layout| {
-                    // std.debug.print("Node {s} has layout\n", .{top.path});
-                    // const dl = fstree.margin(layout, 2);
-                    const dl = layout; // TODO: margini a livello di layout
-                    const color: rl.Color = if (top.kind == .directory) dir_color else .sky_blue;
-                    rl.drawRectangle(dl.upper_left.x, dl.upper_left.y, dl.width(), dl.height(), color);
-                    // TODO: Fare due funzioni per disegnare file e directory.
-                    // file sono sempre uguali ma con testo al centro
-                    // directory disegnano il contenuto un po' piu in basso e nell'header hanno
-                    // il nome della cartella.
-                    // Questi orpelli RICHIEDONO che l'assegnazione del layout e la graficazione
-                    // avvengano praticamente insieme.
-                    // Aiuto.
-                    const fontSize = 8;
-                    const width = rl.measureText(top.basename, fontSize);
-                    const center = dl.center();
-                    if (dl.width() > width + 2 and dl.height() >= fontSize + 2) {
-                        rl.drawText(top.basename, center.x - @divTrunc(width, 2), center.y - 4, fontSize, .black);
-                    }
-                    rl.drawRectangleLines(dl.upper_left.x, dl.upper_left.y, dl.width(), dl.height(), .black);
-                } else {
-                    // std.debug.print("Node {s} has no layout. Skip.\n", .{top.path});
+                const color: rl.Color = if (top.fsnode.kind == .directory) dir_color else .sky_blue;
+                const dl = top.box_layout;
+                rl.drawRectangle(dl.upper_left.x, dl.upper_left.y, dl.width(), dl.height(), color);
+                // TODO: Fare due funzioni per disegnare file e directory.
+                // file sono sempre uguali ma con testo al centro
+                // directory disegnano il contenuto un po' piu in basso e nell'header hanno
+                // il nome della cartella.
+                // Questi orpelli RICHIEDONO che l'assegnazione del layout e la graficazione
+                // avvengano praticamente insieme.
+                // Aiuto.
+                const fontSize = 8;
+                const width = rl.measureText(top.fsnode.basename, fontSize);
+                const center = dl.center();
+                if (dl.width() > width + 2 and dl.height() >= fontSize + 2) {
+                    rl.drawText(top.fsnode.basename, center.x - @divTrunc(width, 2), center.y - 4, fontSize, .black);
                 }
+                rl.drawRectangleLines(dl.upper_left.x, dl.upper_left.y, dl.width(), dl.height(), .black);
                 // Append childrens to next_layer_stack
                 try next_layer_stack.appendSlice(gpa, top.children.items);
             }

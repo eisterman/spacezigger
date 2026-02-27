@@ -14,14 +14,64 @@ pub fn realpathAllocZ(self: Dir, allocator: Allocator, pathname: []const u8) Dir
     return allocator.dupeZ(u8, try self.realpath(pathname, buf[0..]));
 }
 
-pub const FsNode = struct {
+// TODO OVERFLOW
+// Cerca di capire dove passano dei numeri a troppo alti.
+// Il size in particolare e' ok che stia u64
+// Pero quando avvengono calcoli di ratei tutto si sminchia perche
+// i32 e' troppo piccolo per calcoli temporanei di size tra f32 e u64.
+// Ridisegna le strutture dati.
+pub const Point = struct {
+    x: i32,
+    y: i32,
+};
+
+pub const LayoutRect = struct {
+    upper_left: Point = .{ .x = 0, .y = 0 },
+    lower_right: Point = .{ .x = 0, .y = 0 },
+
+    const Self = @This();
+    pub fn width(self: Self) i32 {
+        return self.lower_right.x - self.upper_left.x;
+    }
+    pub fn height(self: Self) i32 {
+        return self.lower_right.y - self.upper_left.y;
+    }
+    pub fn lower_left(self: Self) Point {
+        return .{
+            .x = self.upper_left.x,
+            .y = self.lower_right.y,
+        };
+    }
+    pub fn upper_right(self: Self) Point {
+        return .{
+            .x = self.lower_right.x,
+            .y = self.upper_left.y,
+        };
+    }
+    pub fn center(self: Self) Point {
+        return .{
+            .x = self.upper_left.x + @divTrunc(self.width(), 2),
+            .y = self.upper_left.y + @divTrunc(self.height(), 2),
+        };
+    }
+    pub fn abs_aspect_ratio(self: Self) f32 {
+        const max: f32 = @floatFromInt(@max(self.height(), self.width()));
+        const min: f32 = @floatFromInt(@min(self.height(), self.width()));
+        if (min == 0.0) return std.math.inf(f32);
+        return max / min;
+    }
+};
+
+pub const Node = struct {
     basename: [:0]const u8,
     path: [:0]const u8,
     size_b: u64,
     kind: fs.File.Kind,
+    layout: ?LayoutRect = null,
+    internal_layout: ?LayoutRect = null, // null = cannot render namebar, use layout
 
-    children: std.ArrayList(*FsNode),
-    parent: ?*FsNode,
+    children: std.ArrayList(*Node),
+    parent: ?*Node,
 
     const Self = @This();
     pub fn deinit(self: *Self, gpa: Allocator) void {
@@ -36,18 +86,18 @@ pub const FsNode = struct {
 };
 
 // TODO: right no errdefer for the tree content
-pub fn create_fstree(directory: Dir, allocator: Allocator) !*FsNode {
+pub fn copywalk(directory: Dir, allocator: Allocator) !*Node {
     const StackItem = struct {
         // Original (from FS)
         iter: Dir.Iterator,
         dirname_len: usize,
         // Copy (node tree)
-        node: *FsNode,
+        node: *Node,
     };
     var gpa = allocator;
     var stack: std.ArrayList(StackItem) = .empty;
     defer stack.deinit(gpa);
-    const root_node = try gpa.create(FsNode);
+    const root_node = try gpa.create(Node);
     root_node.* = .{
         .basename = try gpa.dupeZ(u8, "."),
         .path = try realpathAllocZ(directory, gpa, "."),
@@ -84,7 +134,7 @@ pub fn create_fstree(directory: Dir, allocator: Allocator) !*FsNode {
             name_buffer.appendSliceAssumeCapacity(base.name);
             // Create node
             if (base.kind == .directory or base.kind == .file) {
-                const new_node = try gpa.create(FsNode);
+                const new_node = try gpa.create(Node);
                 new_node.* = .{
                     .basename = try gpa.dupeZ(u8, base.name),
                     .path = try gpa.dupeZ(u8, name_buffer.items),
@@ -93,15 +143,6 @@ pub fn create_fstree(directory: Dir, allocator: Allocator) !*FsNode {
                     .children = .empty,
                     .parent = top.node,
                 };
-                // Report size to parents if file
-                if (base.kind == .file) {
-                    var parent: ?*FsNode = top.node;
-                    while (parent) |pn| {
-                        pn.size_b += new_node.size_b;
-                        parent = pn.parent;
-                    }
-                }
-                // Continue with node creation
                 try top.node.children.append(gpa, new_node);
                 if (base.kind == .directory) {
                     var new_dir = top.iter.dir.openDir(base.name, .{ .iterate = true }) catch |err| switch (err) {
@@ -129,4 +170,22 @@ pub fn create_fstree(directory: Dir, allocator: Allocator) !*FsNode {
         }
     }
     return root_node;
+}
+
+// Calculate Size by iterating on all node that are files
+//   and then using the parent link to bubble up the size until
+//   you reach root.
+pub fn calculate_tree_size(node: *Node) u64 {
+    if (node.kind == .file) {
+        return node.size_b;
+    } else if (node.kind == .directory) {
+        var total_size: u64 = 0;
+        for (node.children.items) |childnode| {
+            total_size += calculate_tree_size(childnode);
+        }
+        node.size_b = total_size;
+        return total_size;
+    } else {
+        return 0;
+    }
 }
