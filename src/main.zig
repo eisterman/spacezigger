@@ -30,6 +30,7 @@ pub fn main() !void {
         },
     };
     const rootnode = try layout_mod.build_layout(gpa, root_fsnode, base_layout);
+    defer rootnode.deinit(gpa);
     // try old_layout_mod.calculate_layout(gpa, rootnode);
 
     rl.initWindow(screenWidth, screenHeight, "SpaceZigger");
@@ -97,7 +98,7 @@ pub fn main() !void {
                                 name_buffer[text_width_available] = 0;
                                 rl.drawText(name_buffer[0..text_width_available :0], text_x, text_y, fontSize, text_color);
                             } else {
-                                var bfr = [3:0]u8{ '.', '.', '.' };
+                                var bfr = "...".*;
                                 bfr[text_width_available] = 0;
                                 rl.drawText(bfr[0..text_width_available :0], text_x, text_y, fontSize, text_color);
                             }

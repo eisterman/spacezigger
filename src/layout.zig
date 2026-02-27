@@ -131,7 +131,7 @@ fn computeWorstAspectRatio(
 }
 
 pub const LayoutNode = struct {
-    fsnode: *FsNode,
+    fsnode: *FsNode, // externally managed
     box_layout: LayoutRect,
 
     children: std.ArrayList(*LayoutNode),
@@ -259,8 +259,11 @@ const RowBuilder = struct {
         self.cache_worst_aspect_ratio = std.math.inf(f32);
         self.cache_nodes_sizes.clearRetainingCapacity();
     }
+    pub fn deinit(self: *Self, gpa: Allocator) void {
+        self.fsnodes.deinit(gpa);
+        self.cache_nodes_sizes.deinit(gpa);
+    }
 
-    // TODO: Resetter per non rialloccare
     pub fn try_insert_fsnode(self: *Self, gpa: Allocator, fsnode: *FsNode) !enum { inserted, rejected } {
         if (self.phase == .finalized) return .rejected;
         const free_size_b_f32: f32 = @floatFromInt(self.free_state.size_b);
@@ -394,10 +397,13 @@ pub fn build_layout(gpa: Allocator, base_fsnode: *FsNode, base_layout: LayoutRec
     layout_root.* = LayoutNode.init_from_fsnode(base_fsnode, base_layout, null);
     // State
     var node_stack: std.ArrayList(*LayoutNode) = .empty;
+    defer node_stack.deinit(gpa);
     try node_stack.append(gpa, layout_root);
     // Scratches
     var row_builder = RowBuilder.init();
+    defer row_builder.deinit(gpa);
     var sorted_children: FsNodesBySizeDesc = .empty;
+    defer sorted_children.deinit(gpa);
     while (node_stack.pop()) |parent_node| {
         var free_state = FreeState{
             .layout = parent_node.content_layout(),
