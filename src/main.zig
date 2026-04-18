@@ -21,7 +21,7 @@ const MainWidgetScreen = struct {
         };
     }
 
-    pub fn refreshLayout(self: *Self, gpa: std.mem.Allocator, width: i32, height: i32) !void {
+    pub fn refreshLayout(self: *Self, gpa: std.mem.Allocator, selFsNode: *fstree.FsNode, width: i32, height: i32) !void {
         if (self.rootLayoutNode) |layoutNode| {
             layoutNode.deinit(gpa);
         }
@@ -31,7 +31,7 @@ const MainWidgetScreen = struct {
                 .y = height,
             },
         };
-        const rootnode = try layout_mod.build_layout(gpa, self.rootFsNode, base_layout);
+        const rootnode = try layout_mod.build_layout(gpa, selFsNode, base_layout);
         self.rootLayoutNode = rootnode;
     }
 
@@ -60,23 +60,63 @@ pub fn main(init: std.process.Init) !void {
     defer rl.closeWindow();
     rl.setTargetFPS(60);
     // Main Game Loop
-    try mainWidgetScreen.refreshLayout(gpa, rl.getScreenWidth(), rl.getScreenHeight());
+    try mainWidgetScreen.refreshLayout(gpa, mainWidgetScreen.rootFsNode, rl.getScreenWidth(), rl.getScreenHeight());
     var cur_layer_stack: std.ArrayList(*layout_mod.LayoutNode) = .empty;
     defer cur_layer_stack.deinit(gpa);
     var next_layer_stack: std.ArrayList(*layout_mod.LayoutNode) = .empty;
     defer next_layer_stack.deinit(gpa);
-    var max_depth: i32 = 0;
+    var max_depth: i32 = 1;
     var name_buffer = [_]u8{0} ** 1024;
+    var focusFsNode = mainWidgetScreen.rootLayoutNode.?.fsnode;
     while (!rl.windowShouldClose()) {
         // Logic
+        var refreshLayout = false;
         if (rl.isKeyPressed(.down) and max_depth > 0) {
             max_depth -= 1;
         } else if (rl.isKeyPressed(.up)) {
             max_depth += 1;
         }
         if (rl.isWindowResized()) {
-            // std.debug.print("Reloading layout...\n", .{});
-            try mainWidgetScreen.refreshLayout(gpa, rl.getScreenWidth(), rl.getScreenHeight());
+            refreshLayout = true;
+        }
+        if (rl.isMouseButtonReleased(.right)) {
+            refreshLayout = true;
+            const mousePos = rl.getMousePosition();
+            // TODO: trova il path del file a cui corrisponde
+            var scanDepth: i32 = 0;
+            var scanNode = mainWidgetScreen.rootLayoutNode.?;
+            while (scanDepth < max_depth) {
+                std.debug.print("Scan {}/{}\n", .{ scanDepth, max_depth });
+                for (scanNode.children.items) |child| {
+                    const xmin: f32 = @floatFromInt(child.box_layout.upper_left.x);
+                    const xmax: f32 = @floatFromInt(child.box_layout.lower_right.x);
+                    const ymin: f32 = @floatFromInt(child.box_layout.upper_left.y);
+                    const ymax: f32 = @floatFromInt(child.box_layout.lower_right.y);
+                    if (xmin <= mousePos.x and mousePos.x <= xmax and ymin <= mousePos.y and mousePos.y <= ymax) {
+                        scanNode = child;
+                        break;
+                    }
+                }
+                scanDepth += 1;
+            }
+            if (scanNode.fsnode.kind == .directory) {
+                std.debug.print("Change focus to '{s}'\n", .{scanNode.fsnode.path});
+                focusFsNode = scanNode.fsnode;
+                max_depth = 1;
+            }
+        } else if (rl.isKeyReleased(.h)) {
+            focusFsNode = mainWidgetScreen.rootFsNode;
+            refreshLayout = true;
+        }
+        // if (rl.isMouseButtonReleased(.right)) {
+        //     refreshLayout = true;
+        //     const mousePos = rl.getMousePosition();
+        //     var scanDepth = 0;
+        //     var changeRootTarget =
+        // }
+        if (refreshLayout) {
+            std.debug.print("Reloading layout...\n", .{});
+            try mainWidgetScreen.refreshLayout(gpa, focusFsNode, rl.getScreenWidth(), rl.getScreenHeight());
         }
         // Draw
         rl.beginDrawing();
