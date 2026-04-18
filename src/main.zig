@@ -4,19 +4,19 @@ const layout_mod = @import("layout.zig");
 const rl = @import("raylib");
 const rg = @import("raygui");
 
-pub fn main() !void {
+pub fn main(init: std.process.Init) !void {
     // const screenWidth = 600;
     // const screenHeight = 400;
     const screenWidth = 1280;
     const screenHeight = 720;
-    const gpa = std.heap.page_allocator;
+    const gpa = init.gpa;
     // var gpa_allocator = std.heap.DebugAllocator(.{}).init;
     // const gpa = gpa_allocator.allocator();
     // defer _ = gpa_allocator.detectLeaks();
     // Create the filesystem tree
-    const targetdir = try std.fs.openDirAbsolute("/home/fpasqua/Downloads", .{ .iterate = true });
+    const targetdir = try std.Io.Dir.openDirAbsolute(init.io, "/home/fpasqua/Downloads", .{ .iterate = true });
     // const targetdir = try std.fs.openDirAbsolute("/home/fpasqua/zig/spacezigger/testdir", .{ .iterate = true });
-    var root_fsnode = try fstree.create_fstree(targetdir, gpa);
+    var root_fsnode = try fstree.create_fstree(targetdir, init.io, gpa);
     // var rootnode = try old_fstree.copywalk(targetdir, gpa);
     defer root_fsnode.deinit(gpa);
     gpa.free(root_fsnode.basename);

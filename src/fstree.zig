@@ -1,24 +1,12 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const Dir = std.fs.Dir;
-const fs = std.fs;
-
-pub fn realpathAllocZ(self: Dir, allocator: Allocator, pathname: []const u8) Dir.RealPathAllocError![:0]u8 {
-    // Use of max_path_bytes here is valid as the realpath function does not
-    // have a variant that takes an arbitrary-size buffer.
-    // TODO(#4812): Consider reimplementing realpath or using the POSIX.1-2008
-    // NULL out parameter (GNU's canonicalize_file_name) to handle overelong
-    // paths. musl supports passing NULL but restricts the output to PATH_MAX
-    // anyway.
-    var buf: [fs.max_path_bytes]u8 = undefined;
-    return allocator.dupeZ(u8, try self.realpath(pathname, buf[0..]));
-}
+const Dir = std.Io.Dir;
 
 pub const FsNode = struct {
     basename: [:0]const u8,
     path: [:0]const u8,
     size_b: u64,
-    kind: fs.File.Kind,
+    kind: std.Io.File.Kind,
 
     children: std.ArrayList(*FsNode),
     parent: ?*FsNode,
@@ -36,7 +24,7 @@ pub const FsNode = struct {
 };
 
 // TODO: right no errdefer for the tree content
-pub fn create_fstree(directory: Dir, allocator: Allocator) !*FsNode {
+pub fn create_fstree(directory: Dir, io: std.Io, allocator: Allocator) !*FsNode {
     const StackItem = struct {
         // Original (from FS)
         iter: Dir.Iterator,
@@ -50,7 +38,7 @@ pub fn create_fstree(directory: Dir, allocator: Allocator) !*FsNode {
     const root_node = try gpa.create(FsNode);
     root_node.* = .{
         .basename = try gpa.dupeZ(u8, "."),
-        .path = try realpathAllocZ(directory, gpa, "."),
+        .path = try directory.realPathFileAlloc(io, ".", gpa),
         .size_b = 0,
         .kind = .directory,
         .children = .empty,
@@ -70,14 +58,14 @@ pub fn create_fstree(directory: Dir, allocator: Allocator) !*FsNode {
         // Example: AccessDenied and similar.
         // TODO: We want it to be skipped with a warning in the
         // final version
-        while (try top.iter.next()) |base| {
+        while (try top.iter.next(io)) |base| {
             var dirname_len = top.dirname_len;
             // Obtain path e basename keeping in mind the previous node infos
             // using a lot of trinks about shrinking and appending to
             // an ArrayList. Optimized for low amount of allocations.
             name_buffer.shrinkRetainingCapacity(dirname_len);
             if (name_buffer.items.len != 0) {
-                try name_buffer.append(gpa, fs.path.sep);
+                try name_buffer.append(gpa, std.fs.path.sep);
                 dirname_len += 1;
             }
             try name_buffer.ensureUnusedCapacity(gpa, base.name.len);
@@ -88,7 +76,7 @@ pub fn create_fstree(directory: Dir, allocator: Allocator) !*FsNode {
                 new_node.* = .{
                     .basename = try gpa.dupeZ(u8, base.name),
                     .path = try gpa.dupeZ(u8, name_buffer.items),
-                    .size_b = if (base.kind == .file) (try top.iter.dir.statFile(base.name)).size else 0,
+                    .size_b = if (base.kind == .file) (try top.iter.reader.dir.statFile(io, base.name, .{ .follow_symlinks = false })).size else 0,
                     .kind = base.kind,
                     .children = .empty,
                     .parent = top.node,
@@ -104,13 +92,13 @@ pub fn create_fstree(directory: Dir, allocator: Allocator) !*FsNode {
                 // Continue with node creation
                 try top.node.children.append(gpa, new_node);
                 if (base.kind == .directory) {
-                    var new_dir = top.iter.dir.openDir(base.name, .{ .iterate = true }) catch |err| switch (err) {
+                    var new_dir = top.iter.reader.dir.openDir(io, base.name, .{ .iterate = true }) catch |err| switch (err) {
                         error.NameTooLong => unreachable, // no path sep in base.name
                         else => |e| return e,
                     };
                     // TODO: why the scope? for the errdefer?
                     {
-                        errdefer new_dir.close();
+                        errdefer new_dir.close(io);
                         try stack.append(gpa, .{
                             .iter = new_dir.iterateAssumeFirstIteration(),
                             .dirname_len = name_buffer.items.len,
@@ -125,7 +113,7 @@ pub fn create_fstree(directory: Dir, allocator: Allocator) !*FsNode {
         }
         var item = stack.pop().?;
         if (stack.items.len != 0) {
-            item.iter.dir.close();
+            item.iter.reader.dir.close(io);
         }
     }
     return root_node;
