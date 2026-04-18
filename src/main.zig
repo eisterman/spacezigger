@@ -82,7 +82,6 @@ pub fn main(init: std.process.Init) !void {
         if (rl.isMouseButtonReleased(.right)) {
             refreshLayout = true;
             const mousePos = rl.getMousePosition();
-            // TODO: trova il path del file a cui corrisponde
             var scanDepth: i32 = 0;
             var scanNode = mainWidgetScreen.rootLayoutNode.?;
             while (scanDepth < max_depth) {
@@ -115,12 +114,6 @@ pub fn main(init: std.process.Init) !void {
                 max_depth += 1;
             }
         }
-        // if (rl.isMouseButtonReleased(.right)) {
-        //     refreshLayout = true;
-        //     const mousePos = rl.getMousePosition();
-        //     var scanDepth = 0;
-        //     var changeRootTarget =
-        // }
         if (refreshLayout) {
             std.debug.print("Reloading layout...\n", .{});
             try mainWidgetScreen.refreshLayout(gpa, focusFsNode, rl.getScreenWidth(), rl.getScreenHeight());
