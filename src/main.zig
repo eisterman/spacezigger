@@ -86,14 +86,15 @@ pub fn main(init: std.process.Init) !void {
             var scanDepth: i32 = 0;
             var scanNode = mainWidgetScreen.rootLayoutNode.?;
             while (scanDepth < max_depth) {
-                std.debug.print("Scan {}/{}\n", .{ scanDepth, max_depth });
                 for (scanNode.children.items) |child| {
                     const xmin: f32 = @floatFromInt(child.box_layout.upper_left.x);
                     const xmax: f32 = @floatFromInt(child.box_layout.lower_right.x);
                     const ymin: f32 = @floatFromInt(child.box_layout.upper_left.y);
                     const ymax: f32 = @floatFromInt(child.box_layout.lower_right.y);
                     if (xmin <= mousePos.x and mousePos.x <= xmax and ymin <= mousePos.y and mousePos.y <= ymax) {
-                        scanNode = child;
+                        if (child.fsnode.kind == .directory) {
+                            scanNode = child;
+                        }
                         break;
                     }
                 }
@@ -107,6 +108,12 @@ pub fn main(init: std.process.Init) !void {
         } else if (rl.isKeyReleased(.h)) {
             focusFsNode = mainWidgetScreen.rootFsNode;
             refreshLayout = true;
+        } else if (rl.isKeyReleased(.b)) {
+            if (focusFsNode.parent) |parent| {
+                focusFsNode = parent;
+                refreshLayout = true;
+                max_depth += 1;
+            }
         }
         // if (rl.isMouseButtonReleased(.right)) {
         //     refreshLayout = true;
