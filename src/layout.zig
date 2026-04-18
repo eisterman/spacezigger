@@ -413,7 +413,7 @@ pub fn build_layout(gpa: Allocator, base_fsnode: *FsNode, base_layout: LayoutRec
         try sorted_children.appendSort(gpa, parent_node.fsnode.children.items);
         for (sorted_children.data.items) |child_fsnode| {
             if (child_fsnode.size_b == 0) {
-                std.debug.print("Rejected zero-sized node {s}\n", .{child_fsnode.path});
+                // std.debug.print("Rejected zero-sized node {s}\n", .{child_fsnode.path});
                 continue;
             }
             if (try row_builder.try_insert_fsnode(gpa, child_fsnode) == .rejected) {

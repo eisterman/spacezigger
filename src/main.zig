@@ -4,39 +4,63 @@ const layout_mod = @import("layout.zig");
 const rl = @import("raylib");
 const rg = @import("raygui");
 
+const MainWidgetScreen = struct {
+    rootFsNode: *fstree.FsNode,
+    rootLayoutNode: ?*layout_mod.LayoutNode,
+
+    const Self = @This();
+    pub fn init(io: std.Io, gpa: std.mem.Allocator, absolutePath: []const u8) !Self {
+        const targetdir = try std.Io.Dir.openDirAbsolute(io, absolutePath, .{ .iterate = true });
+        var root_fsnode = try fstree.create_fstree(targetdir, io, gpa);
+        gpa.free(root_fsnode.basename);
+        root_fsnode.basename = try gpa.dupeZ(u8, "Target Directory");
+        // _ = old_fstree.calculate_tree_size(rootnode);
+        return .{
+            .rootFsNode = root_fsnode,
+            .rootLayoutNode = null,
+        };
+    }
+
+    pub fn refreshLayout(self: *Self, gpa: std.mem.Allocator, width: i32, height: i32) !void {
+        if (self.rootLayoutNode) |layoutNode| {
+            layoutNode.deinit(gpa);
+        }
+        const base_layout: layout_mod.LayoutRect = .{
+            .lower_right = .{
+                .x = width,
+                .y = height,
+            },
+        };
+        const rootnode = try layout_mod.build_layout(gpa, self.rootFsNode, base_layout);
+        self.rootLayoutNode = rootnode;
+    }
+
+    pub fn deinit(self: *Self, gpa: std.mem.Allocator) void {
+        if (self.rootLayoutNode) |layoutNode| {
+            layoutNode.deinit(gpa);
+        }
+        self.rootFsNode.deinit(gpa);
+    }
+};
+
 pub fn main(init: std.process.Init) !void {
-    // const screenWidth = 600;
-    // const screenHeight = 400;
-    const screenWidth = 1280;
-    const screenHeight = 720;
     const gpa = init.gpa;
     // var gpa_allocator = std.heap.DebugAllocator(.{}).init;
     // const gpa = gpa_allocator.allocator();
     // defer _ = gpa_allocator.detectLeaks();
     // Create the filesystem tree
-    const targetdir = try std.Io.Dir.openDirAbsolute(init.io, "/home/fpasqua/Downloads", .{ .iterate = true });
-    // const targetdir = try std.fs.openDirAbsolute("/home/fpasqua/zig/spacezigger/testdir", .{ .iterate = true });
-    var root_fsnode = try fstree.create_fstree(targetdir, init.io, gpa);
-    // var rootnode = try old_fstree.copywalk(targetdir, gpa);
-    defer root_fsnode.deinit(gpa);
-    gpa.free(root_fsnode.basename);
-    root_fsnode.basename = try gpa.dupeZ(u8, "Target Directory");
+    const targetdir = "/home/fpasqua/Downloads";
+    // const targetdir = "/home/fpasqua/zig/spacezigger/testdir";
+    var mainWidgetScreen = try MainWidgetScreen.init(init.io, init.gpa, targetdir);
+    defer mainWidgetScreen.deinit(gpa);
     // _ = old_fstree.calculate_tree_size(rootnode);
-    std.debug.print("Size Root: {}\n", .{root_fsnode.size_b});
-    const base_layout: layout_mod.LayoutRect = .{
-        .lower_right = .{
-            .x = screenWidth,
-            .y = screenHeight,
-        },
-    };
-    const rootnode = try layout_mod.build_layout(gpa, root_fsnode, base_layout);
-    defer rootnode.deinit(gpa);
-    // try old_layout_mod.calculate_layout(gpa, rootnode);
 
-    rl.initWindow(screenWidth, screenHeight, "SpaceZigger");
+    rl.setConfigFlags(.{ .window_resizable = true });
+    rl.initWindow(1280, 720, "SpaceZigger");
     defer rl.closeWindow();
     rl.setTargetFPS(60);
     // Main Game Loop
+    try mainWidgetScreen.refreshLayout(gpa, rl.getScreenWidth(), rl.getScreenHeight());
     var cur_layer_stack: std.ArrayList(*layout_mod.LayoutNode) = .empty;
     defer cur_layer_stack.deinit(gpa);
     var next_layer_stack: std.ArrayList(*layout_mod.LayoutNode) = .empty;
@@ -50,13 +74,17 @@ pub fn main(init: std.process.Init) !void {
         } else if (rl.isKeyPressed(.up)) {
             max_depth += 1;
         }
+        if (rl.isWindowResized()) {
+            // std.debug.print("Reloading layout...\n", .{});
+            try mainWidgetScreen.refreshLayout(gpa, rl.getScreenWidth(), rl.getScreenHeight());
+        }
         // Draw
         rl.beginDrawing();
         defer rl.endDrawing();
         rl.clearBackground(.white);
         // Draw rectangles
         var draw_depth: i32 = 0;
-        try next_layer_stack.append(gpa, rootnode);
+        try next_layer_stack.append(gpa, mainWidgetScreen.rootLayoutNode.?);
         defer cur_layer_stack.clearRetainingCapacity();
         defer next_layer_stack.clearRetainingCapacity();
         while (next_layer_stack.items.len != 0 and draw_depth <= max_depth) {
