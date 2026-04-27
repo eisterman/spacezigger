@@ -33,6 +33,8 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "raygui", .module = raygui },
             },
         }),
+        .use_llvm = true,
+        // .use_lld = false,
     });
     exe.root_module.linkLibrary(raylib_artifact);
 
